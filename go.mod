@@ -1,3 +1,3 @@
-module github.com/infodancer/gotemplate
+module github.com/infodancer/msgstore
 
 go 1.23
