@@ -26,11 +26,6 @@ type MessageStore interface {
 	// Stat returns mailbox statistics.
 	// count is the number of messages, totalBytes is the sum of all message sizes.
 	Stat(ctx context.Context, mailbox string) (count int, totalBytes int64, err error)
-
-	// RetrieveHeaders returns the header section plus up to bodyLines lines of body.
-	// More efficient than Retrieve for TOP requests on large messages.
-	// The caller is responsible for closing the returned ReadCloser.
-	RetrieveHeaders(ctx context.Context, mailbox string, uid string, bodyLines int) (io.ReadCloser, error)
 }
 
 // MessageInfo contains metadata about a stored message.

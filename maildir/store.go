@@ -1,7 +1,6 @@
 package maildir
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"hash/fnv"
@@ -408,44 +407,6 @@ func (s *MaildirStore) Stat(ctx context.Context, mailbox string) (count int, tot
 		totalBytes += msg.Size
 	}
 	return count, totalBytes, nil
-}
-
-// RetrieveHeaders implements msgstore.MessageStore.
-// Returns the header section plus up to bodyLines lines of body.
-func (s *MaildirStore) RetrieveHeaders(ctx context.Context, mailbox string, uid string, bodyLines int) (io.ReadCloser, error) {
-	rc, err := s.Retrieve(ctx, mailbox, uid)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rc.Close() }()
-
-	scanner := bufio.NewScanner(rc)
-	var buf bytes.Buffer
-	inBody := false
-	bodyCount := 0
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !inBody {
-			buf.WriteString(line)
-			buf.WriteString("\r\n")
-			if line == "" {
-				inBody = true
-			}
-		} else {
-			if bodyCount >= bodyLines {
-				break
-			}
-			buf.WriteString(line)
-			buf.WriteString("\r\n")
-			bodyCount++
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
 }
 
 // --- FolderStore implementation ---
