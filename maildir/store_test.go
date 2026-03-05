@@ -994,6 +994,114 @@ func TestMaildirStore_DeliverToFolderAutoCreates(t *testing.T) {
 	}
 }
 
+func TestMaildirStore_DeliverSpamToJunk(t *testing.T) {
+	basePath := t.TempDir()
+	store := NewStore(basePath, "", "")
+	ctx := context.Background()
+
+	// Deliver a flagged message — should land in Junk, not INBOX.
+	envelope := msgstore.Envelope{
+		From:       "spammer@example.com",
+		Recipients: []string{"user@example.com"},
+		SpamResult: &msgstore.SpamResult{
+			Score:   8.5,
+			Action:  "flag",
+			Checker: "rspamd",
+		},
+	}
+	if err := store.Deliver(ctx, envelope, strings.NewReader("Subject: Buy now\r\n\r\nSpam body")); err != nil {
+		t.Fatalf("Deliver failed: %v", err)
+	}
+
+	// Junk folder should have the message.
+	junkMsgs, err := store.ListInFolder(ctx, "user@example.com", "Junk")
+	if err != nil {
+		t.Fatalf("ListInFolder(Junk) failed: %v", err)
+	}
+	if len(junkMsgs) != 1 {
+		t.Fatalf("expected 1 message in Junk, got %d", len(junkMsgs))
+	}
+
+	// INBOX should be empty.
+	inboxMsgs, err := store.List(ctx, "user@example.com")
+	if err != nil {
+		t.Fatalf("List(INBOX) failed: %v", err)
+	}
+	if len(inboxMsgs) != 0 {
+		t.Fatalf("expected 0 messages in INBOX, got %d", len(inboxMsgs))
+	}
+}
+
+func TestMaildirStore_DeliverSpamWithExtensionOverride(t *testing.T) {
+	basePath := t.TempDir()
+	store := NewStore(basePath, "", "")
+	ctx := context.Background()
+
+	// Create a "work" folder for the user.
+	if err := store.CreateFolder(ctx, "user@example.com", "work"); err != nil {
+		t.Fatalf("CreateFolder failed: %v", err)
+	}
+
+	// Deliver a flagged message with +work extension — extension wins over spam routing.
+	envelope := msgstore.Envelope{
+		From:       "spammer@example.com",
+		Recipients: []string{"user+work@example.com"},
+		SpamResult: &msgstore.SpamResult{
+			Score:   8.5,
+			Action:  "flag",
+			Checker: "rspamd",
+		},
+	}
+	if err := store.Deliver(ctx, envelope, strings.NewReader("Subject: Buy now\r\n\r\nSpam body")); err != nil {
+		t.Fatalf("Deliver failed: %v", err)
+	}
+
+	// Message should be in "work", not "Junk".
+	workMsgs, err := store.ListInFolder(ctx, "user@example.com", "work")
+	if err != nil {
+		t.Fatalf("ListInFolder(work) failed: %v", err)
+	}
+	if len(workMsgs) != 1 {
+		t.Fatalf("expected 1 message in work, got %d", len(workMsgs))
+	}
+
+	junkMsgs, err := store.ListInFolder(ctx, "user@example.com", "Junk")
+	if err != nil {
+		t.Fatalf("ListInFolder(Junk) failed: %v", err)
+	}
+	if len(junkMsgs) != 0 {
+		t.Fatalf("expected 0 messages in Junk, got %d", len(junkMsgs))
+	}
+}
+
+func TestMaildirStore_DeliverAcceptedToInbox(t *testing.T) {
+	basePath := t.TempDir()
+	store := NewStore(basePath, "", "")
+	ctx := context.Background()
+
+	// Deliver a message with SpamResult action "accept" — should go to INBOX.
+	envelope := msgstore.Envelope{
+		From:       "friend@example.com",
+		Recipients: []string{"user@example.com"},
+		SpamResult: &msgstore.SpamResult{
+			Score:   1.2,
+			Action:  "accept",
+			Checker: "rspamd",
+		},
+	}
+	if err := store.Deliver(ctx, envelope, strings.NewReader("Subject: Hello\r\n\r\nHam body")); err != nil {
+		t.Fatalf("Deliver failed: %v", err)
+	}
+
+	inboxMsgs, err := store.List(ctx, "user@example.com")
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(inboxMsgs) != 1 {
+		t.Fatalf("expected 1 message in INBOX, got %d", len(inboxMsgs))
+	}
+}
+
 func TestMaildirStore_ListInFolder(t *testing.T) {
 	basePath := t.TempDir()
 	store := NewStore(basePath, "", "")

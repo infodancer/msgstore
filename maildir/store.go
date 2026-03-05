@@ -296,15 +296,23 @@ func (s *MaildirStore) Deliver(ctx context.Context, envelope msgstore.Envelope, 
 			_ = sieveCmds // TODO(msgstore#14): interpret
 		}
 
-		// Resolve delivery target. If the recipient has a +extension, deliver
-		// to the matching Maildir++ folder — but only if it already exists.
-		// The user controls which folders accept subaddressed mail: if the
-		// folder does not exist, fall back to the inbox silently.
+		// Resolve delivery target, in priority order:
+		// 1. Explicit +extension (user-controlled subaddress routing)
+		// 2. Spam flag → Junk folder
+		// 3. Default → INBOX
 		var dir maildir.Dir
 		if parsed.Extension != "" {
 			if folderDir, ok := s.folderIfExists(parsed.Address, parsed.Extension); ok {
 				dir = folderDir
 			}
+		}
+		if dir == "" && envelope.SpamResult != nil && envelope.SpamResult.Action == "flag" {
+			junkDir, err := s.ensureFolderMaildir(parsed.Address, "Junk")
+			if err != nil {
+				lastErr = err
+				continue
+			}
+			dir = junkDir
 		}
 		if dir == "" {
 			// Deliver to inbox, creating it on first delivery.
